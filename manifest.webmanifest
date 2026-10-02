@@ -1,0 +1,13 @@
+{
+  "name": "Vaakapalkin taipuma-arvio",
+  "short_name": "Taipuma-arvio",
+  "lang": "fi",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f3f7f7",
+  "theme_color": "#123b4a",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "description": "Kuormalavahyllystön vaakapalkin taipuman suuntaa-antava kamera-arvio."
+}

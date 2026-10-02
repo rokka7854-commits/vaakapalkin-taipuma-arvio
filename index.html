@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="fi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#123b4a" />
+    <meta name="description" content="Kuormalavahyllystön vaakapalkin taipuman suuntaa-antava kamera-arvio." />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="styles.css" />
+    <title>Vaakapalkin taipuma-arvio</title>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">KUORMALAVAHYLLYSTÖ</p>
+          <h1>Vaakapalkin taipuma-arvio</h1>
+          <p class="lede">Kamerakuvaan perustuva suuntaa-antava arvio kuormitetun palkin L/200-vertailuarvosta.</p>
+        </div>
+        <button class="icon-button" id="installButton" type="button" hidden>Asenna sovellus</button>
+      </header>
+
+      <section class="settings card" aria-labelledby="settingsHeading">
+        <h2 id="settingsHeading">Arvioinnin tiedot</h2>
+        <div class="form-grid">
+          <label>
+            Palkin jänneväli
+            <select id="spanPreset">
+              <option value="1800">1 800 mm</option>
+              <option value="2300">2 300 mm</option>
+              <option value="2500">2 500 mm</option>
+              <option value="2700" selected>2 700 mm</option>
+              <option value="2750">2 750 mm</option>
+              <option value="3600">3 600 mm</option>
+              <option value="custom">Muu pituus</option>
+            </select>
+          </label>
+          <label>
+            Jänneväli, mm
+            <input id="spanInput" type="number" inputmode="numeric" min="500" max="6000" step="1" value="2700" />
+          </label>
+          <label>
+            Tarkistuskehotus alkaen
+            <div class="suffix-input">
+              <input id="warningPercent" type="number" inputmode="numeric" min="50" max="100" step="1" value="75" />
+              <span>% L/200</span>
+            </div>
+          </label>
+        </div>
+        <p class="field-note">Jänneväli = pystyelementtien keskilinjojen välinen etäisyys. L/200-vertailuarvo: <strong id="limitText">13,5 mm</strong>.</p>
+      </section>
+
+      <section class="camera-panel card" aria-labelledby="cameraHeading">
+        <div class="section-heading">
+          <div>
+            <h2 id="cameraHeading">Kuva ja merkinnät</h2>
+            <p id="cameraStatus" aria-live="polite">Avaa kamera tai lataa kuva. Kuvaa palkki mahdollisimman kohtisuoraan.</p>
+          </div>
+          <div class="camera-actions">
+            <button class="button button-primary" id="openCameraButton" type="button">Avaa kamera</button>
+            <label class="button button-secondary file-button">
+              Lataa kuva
+              <input id="imageUpload" type="file" accept="image/*" />
+            </label>
+          </div>
+        </div>
+
+        <div class="viewer-wrap">
+          <div class="viewer" id="viewer">
+            <video id="cameraVideo" autoplay playsinline muted hidden></video>
+            <canvas id="imageCanvas" hidden></canvas>
+            <canvas id="overlayCanvas" aria-label="Kuvan merkintäpinta" hidden></canvas>
+            <div class="zoom-controls" aria-label="Kuvan zoomaus">
+              <button class="zoom-button" id="zoomOutButton" type="button" disabled aria-label="Loitonna kuvaa">−</button>
+              <strong id="zoomValue">100 %</strong>
+              <button class="zoom-button" id="zoomInButton" type="button" disabled aria-label="Lähennä kuvaa">+</button>
+              <button class="zoom-reset" id="resetZoomButton" type="button" disabled>Palauta</button>
+            </div>
+            <div class="empty-view" id="emptyView">
+              <span aria-hidden="true">⌁</span>
+              <p>Kuva avautuu tähän</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="workflow" aria-label="Mittauksen vaiheet">
+          <button class="button button-secondary" id="freezeButton" type="button" disabled>Pysäytä kuva</button>
+          <div class="mode-toggle" role="group" aria-label="Kuvan käsittelytapa">
+            <button class="mode-button" id="panModeButton" type="button" disabled>Siirrä kuvaa</button>
+            <button class="mode-button" id="markModeButton" type="button" disabled>Aseta merkinnät</button>
+          </div>
+          <button class="button button-secondary" id="baselineButton" type="button" disabled>1. Aseta vertailuviiva</button>
+          <button class="button button-secondary" id="edgeButton" type="button" disabled>2. Piirrä palkin reuna</button>
+          <button class="button button-ghost" id="undoButton" type="button" disabled>Kumoa piste</button>
+          <button class="button button-ghost" id="resetButton" type="button" disabled>Tyhjennä merkinnät</button>
+        </div>
+        <p class="instruction" id="instructionText">Avaa kamerakuva tai lataa palkista otettu kuva.</p>
+        <p class="field-note">Lähennä +/−-painikkeilla. Valitse <strong>Siirrä kuvaa</strong> ja vedä kuva oikeaan kohtaan. Valitse sitten <strong>Aseta merkinnät</strong>; merkkejä voi vetää jälkikäteen tarkempaan kohtaan.</p>
+      </section>
+
+      <section class="result-section" aria-labelledby="resultHeading">
+        <div class="section-heading result-heading">
+          <div>
+            <h2 id="resultHeading">Taipuma-arvio</h2>
+            <p>Arvio valmistuu, kun vertailuviiva ja palkin reuna on piirretty vähintään kolmen kohdan kautta.</p>
+          </div>
+          <button class="button button-primary" id="calculateButton" type="button" disabled>Laske arvio</button>
+        </div>
+        <div class="result-grid" id="resultGrid" hidden>
+          <article class="metric"><span>Arvioitu poikkeama</span><strong id="deflectionValue">–</strong></article>
+          <article class="metric"><span>L/200-vertailuarvo</span><strong id="limitValue">–</strong></article>
+          <article class="metric"><span>Osuus vertailuarvosta</span><strong id="ratioValue">–</strong></article>
+        </div>
+        <div class="assessment" id="assessment" hidden aria-live="polite"></div>
+      </section>
+
+      <section class="record-section card" aria-labelledby="recordHeading">
+        <div class="section-heading">
+          <div>
+            <h2 id="recordHeading">Tallenna erillinen taipuma-arvio</h2>
+            <p>Arvio tallennetaan vain tälle laitteelle. Kuvan voi myös ladata erillisenä liitetiedostona.</p>
+          </div>
+          <div class="record-actions">
+            <button class="button button-secondary" id="downloadImageButton" type="button" disabled>Lataa merkitty kuva</button>
+            <button class="button button-primary" id="saveRecordButton" type="button" disabled>Tallenna arvio</button>
+          </div>
+        </div>
+        <div id="records" class="records" aria-live="polite"></div>
+      </section>
+
+      <section class="disclaimer" aria-labelledby="disclaimerHeading">
+        <h2 id="disclaimerHeading">Huomio</h2>
+        <p>Tulos on kamerakuvan ja käyttäjän tekemien merkintöjen perusteella muodostettu suuntaa-antava arvio. Se ei sovellu kuormittamattoman palkin L/1000-arviointiin eikä korvaa erillistä mittausta, valmistajan ohjeita tai pätevän tarkastajan arviota.</p>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
