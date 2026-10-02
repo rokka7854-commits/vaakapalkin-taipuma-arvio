@@ -7,7 +7,6 @@ const elements = {
   imageUpload: document.querySelector('#imageUpload'),
   freezeButton: document.querySelector('#freezeButton'),
   baselineButton: document.querySelector('#baselineButton'),
-  edgeButton: document.querySelector('#edgeButton'),
   undoButton: document.querySelector('#undoButton'),
   resetButton: document.querySelector('#resetButton'),
   calculateButton: document.querySelector('#calculateButton'),
@@ -43,7 +42,7 @@ const state = {
   frozen: false,
   tool: null,
   baseline: [],
-  edgePoints: [],
+  detectedEdge: [],
   result: null,
   deferredPrompt: null,
   pointer: null,
@@ -132,8 +131,7 @@ function redraw() {
   } else {
     state.baseline.forEach((point, index) => drawPoint(point, '#0f5563', index === 0 ? 'A' : 'B'));
   }
-  drawTrace(state.edgePoints);
-  state.edgePoints.forEach((point) => drawPoint(point, '#f2b134'));
+  drawTrace(state.detectedEdge);
   if (state.result?.maxPoint && state.baseline.length === 2) {
     const projected = projectOntoLine(state.result.maxPoint, state.baseline[0], state.baseline[1]);
     drawLine(projected, state.result.maxPoint, '#dc3f3f', 5);
@@ -184,9 +182,9 @@ function setInteractionMode(mode) {
   if (mode === 'pan') {
     setInstruction('Lähennä tarvittaessa +/−-painikkeilla ja vedä kuvaa sormella. Valitse “Aseta merkinnät”, kun palkin kiinnityskohdat tai reuna ovat kohdallaan.');
   } else if (state.baseline.length < 2) {
-    setInstruction('Valitse “1. Aseta vertailuviiva” ja merkitse palkin sama alareuna vasemman ja oikean kiinnityskohdan läheltä.');
+    setInstruction('Valitse “1. Aseta kaksi vertailupistettä” ja merkitse palkin sama alareuna vasemman ja oikean kiinnityskohdan läheltä.');
   } else {
-    setInstruction('Valitse “2. Piirrä palkin reuna” ja vedä sormella saman palkin alareunaa pitkin.');
+    setInstruction('Kaksi vertailupistettä on asetettu. Sovellus hakee palkin alareunan automaattisesti niiden välistä.');
   }
   updateControls();
 }
@@ -203,7 +201,7 @@ function setImageDimensions(width, height) {
 
 function resetMarks() {
   state.baseline = [];
-  state.edgePoints = [];
+  state.detectedEdge = [];
   state.result = null;
   elements.resultGrid.hidden = true;
   elements.assessment.hidden = true;
@@ -219,10 +217,9 @@ function updateControls() {
   elements.panModeButton.disabled = !ready;
   elements.markModeButton.disabled = !ready;
   elements.baselineButton.disabled = !ready;
-  elements.edgeButton.disabled = !ready || state.baseline.length !== 2;
-  elements.undoButton.disabled = !ready || (state.baseline.length === 0 && state.edgePoints.length === 0);
-  elements.resetButton.disabled = !ready || (state.baseline.length === 0 && state.edgePoints.length === 0);
-  elements.calculateButton.disabled = !ready || state.baseline.length !== 2 || state.edgePoints.length < 3;
+  elements.undoButton.disabled = !ready || state.baseline.length === 0;
+  elements.resetButton.disabled = !ready || state.baseline.length === 0;
+  elements.calculateButton.disabled = !ready || state.baseline.length !== 2;
   updateZoom();
 }
 
@@ -232,8 +229,7 @@ function markerRadius() {
 
 function nearestMarker(point) {
   const markers = [
-    ...state.baseline.map((marker, index) => ({ kind: 'baseline', index, marker })),
-    ...state.edgePoints.map((marker, index) => ({ kind: 'edge', index, marker }))
+    ...state.baseline.map((marker, index) => ({ kind: 'baseline', index, marker }))
   ];
   return markers.reduce((closest, candidate) => {
     const distance = Math.hypot(candidate.marker.x - point.x, candidate.marker.y - point.y);
@@ -243,11 +239,11 @@ function nearestMarker(point) {
 
 function moveMarker(target, point) {
   if (target.kind === 'baseline') state.baseline[target.index] = point;
-  if (target.kind === 'edge') state.edgePoints[target.index] = point;
 }
 
 function clearResult() {
   state.result = null;
+  state.detectedEdge = [];
   elements.resultGrid.hidden = true;
   elements.assessment.hidden = true;
   elements.saveRecordButton.disabled = true;
@@ -258,16 +254,11 @@ function addBaselinePoint(point) {
   state.baseline.push(point);
   if (state.baseline.length === 2) {
     state.tool = null;
-    setInstruction('Vertailuviiva on asetettu. Valitse “2. Piirrä palkin reuna” ja vedä sormella saman palkin alareunaa pitkin. Voit vetää sinisiä merkkejä myöhemmin tarkempaan kohtaan.');
+    setInstruction('Kaksi vertailupistettä on asetettu. Tunnistan palkin alareunan niiden välistä…');
+    calculate();
   } else {
     setInstruction('Merkitse seuraavaksi palkin sama alareuna vastakkaisen kiinnityskohdan läheltä.');
   }
-}
-
-function addEdgePoint(point) {
-  const previous = state.edgePoints.at(-1);
-  const minimum = Math.max(12, elements.imageCanvas.width * .012);
-  if (!previous || Math.hypot(previous.x - point.x, previous.y - point.y) >= minimum) state.edgePoints.push(point);
 }
 
 function stopCamera() {
@@ -312,7 +303,7 @@ function freezeFrame() {
   state.interactionMode = 'pan';
   resetView();
   resetMarks();
-  elements.cameraStatus.textContent = 'Kuva pysäytetty. Voit nyt merkitä vertailuviivan ja palkin reunan.';
+  elements.cameraStatus.textContent = 'Kuva pysäytetty. Merkitse palkin alareuna kahdesta kiinnityskohdasta.';
   setInstruction('Lähennä tarvittaessa +/−-painikkeilla ja vedä kuvaa sormella. Valitse “Aseta merkinnät”, kun palkin kiinnityskohdat ovat kohdallaan.');
   updateControls();
 }
@@ -333,7 +324,7 @@ function loadImage(file) {
     state.interactionMode = 'pan';
     resetView();
     resetMarks();
-    elements.cameraStatus.textContent = 'Kuva ladattu. Säädä kuvaa ensin ja merkitse sitten vertailuviiva sekä palkin alareuna.';
+    elements.cameraStatus.textContent = 'Kuva ladattu. Säädä kuvaa ensin ja merkitse sitten palkin alareuna kahdesta kiinnityskohdasta.';
     setInstruction('Lähennä tarvittaessa +/−-painikkeilla ja vedä kuvaa sormella. Valitse “Aseta merkinnät”, kun palkin kiinnityskohdat ovat kohdallaan.');
     updateControls();
     URL.revokeObjectURL(image.src);
@@ -354,11 +345,83 @@ function pointDistanceToLine(point, a, b) {
   return Math.hypot(point.x - projection.x, point.y - projection.y);
 }
 
+function isBeamColour(r, g, b) {
+  const maximum = Math.max(r, g, b);
+  const minimum = Math.min(r, g, b);
+  return r > 72 && r > g * 1.18 && r > b * 1.25 && maximum - minimum > 32;
+}
+
+function median(values) {
+  const ordered = [...values].sort((a, b) => a - b);
+  return ordered[Math.floor(ordered.length / 2)];
+}
+
+function detectBeamEdge(a, b) {
+  const length = Math.hypot(b.x - a.x, b.y - a.y);
+  if (length < 80) return [];
+  const ux = (b.x - a.x) / length;
+  const uy = (b.y - a.y) / length;
+  const nx = -uy;
+  const ny = ux;
+  const pixels = ctx.getImageData(0, 0, elements.imageCanvas.width, elements.imageCanvas.height).data;
+  const width = elements.imageCanvas.width;
+  const height = elements.imageCanvas.height;
+  const sampleCount = Math.max(32, Math.min(100, Math.round(length / 12)));
+  const search = Math.max(28, Math.min(110, Math.round(length * .075)));
+  const candidates = [];
+
+  for (let i = 2; i < sampleCount - 2; i += 1) {
+    const t = i / (sampleCount - 1);
+    const cx = a.x + (b.x - a.x) * t;
+    const cy = a.y + (b.y - a.y) * t;
+    const runs = [];
+    let run = null;
+    for (let s = -search; s <= search; s += 1) {
+      const x = Math.round(cx + nx * s);
+      const y = Math.round(cy + ny * s);
+      const idx = (y * width + x) * 4;
+      const painted = x >= 0 && x < width && y >= 0 && y < height && isBeamColour(pixels[idx], pixels[idx + 1], pixels[idx + 2]);
+      if (painted) {
+        if (!run) run = { start: s, end: s };
+        else run.end = s;
+      } else if (run) {
+        if (run.end - run.start >= 2) runs.push(run);
+        run = null;
+      }
+    }
+    if (run && run.end - run.start >= 2) runs.push(run);
+    if (!runs.length) continue;
+    const best = runs.reduce((winner, item) => {
+      const winnerScore = Math.abs(winner.end) + 10 / (winner.end - winner.start + 1);
+      const itemScore = Math.abs(item.end) + 10 / (item.end - item.start + 1);
+      return itemScore < winnerScore ? item : winner;
+    });
+    candidates.push({ t, offset: best.end });
+  }
+
+  if (candidates.length < 14) return [];
+  const centre = median(candidates.map((item) => item.offset));
+  const filtered = candidates.filter((item) => Math.abs(item.offset - centre) <= Math.max(16, search * .45));
+  if (filtered.length < 12) return [];
+  return filtered.map((item, index, all) => {
+    const nearby = all.slice(Math.max(0, index - 2), Math.min(all.length, index + 3)).map((entry) => entry.offset);
+    const offset = median(nearby);
+    return { x: a.x + (b.x - a.x) * item.t + nx * offset, y: a.y + (b.y - a.y) * item.t + ny * offset };
+  });
+}
+
 function calculate() {
   const [a, b] = state.baseline;
   const baselinePixels = Math.hypot(b.x - a.x, b.y - a.y);
   if (!baselinePixels) return;
-  const distances = state.edgePoints.map((point) => ({ point, px: pointDistanceToLine(point, a, b) }));
+  state.detectedEdge = detectBeamEdge(a, b);
+  if (state.detectedEdge.length < 12) {
+    clearResult();
+    setInstruction('Palkin alareunaa ei voitu tunnistaa riittävän luotettavasti. Lähennä kuvaa, siirrä se palkin kohdalle ja aseta kaksi sinistä pistettä tarkemmin alareunaan.');
+    redraw();
+    return;
+  }
+  const distances = state.detectedEdge.map((point) => ({ point, px: pointDistanceToLine(point, a, b) }));
   const maximum = distances.reduce((winner, item) => item.px > winner.px ? item : winner);
   const estimate = maximum.px / baselinePixels * spanMm();
   const limit = thresholdMm();
@@ -383,6 +446,7 @@ function calculate() {
   }
   elements.saveRecordButton.disabled = false;
   elements.downloadImageButton.disabled = false;
+  setInstruction('Palkin alareuna on tunnistettu keltaisena viivana. Punainen viiva näyttää suurimman havaitun poikkeaman.');
   redraw();
 }
 
@@ -463,16 +527,10 @@ function handlePointerDown(event) {
   }
   const point = scaledPoint(event);
   const nearest = nearestMarker(point);
-  state.pointer = { start: point, target: nearest.distance <= markerRadius() ? nearest : null, tracing: false };
+  state.pointer = { start: point, target: nearest.distance <= markerRadius() ? nearest : null };
   if (state.pointer.target) {
     setInstruction('Valittu merkki on suurennettu. Vedä se ristikkoon oikeaan kohtaan ja vapauta sormi.');
     return;
-  }
-  if (state.tool === 'edge') {
-    state.pointer.tracing = true;
-    addEdgePoint(point);
-    clearResult();
-    redraw();
   }
 }
 
@@ -491,11 +549,6 @@ function handlePointerMove(event) {
     redraw();
     return;
   }
-  if (state.pointer.tracing) {
-    addEdgePoint(point);
-    clearResult();
-    redraw();
-  }
 }
 
 function handlePointerUp(event) {
@@ -510,13 +563,9 @@ function handlePointerUp(event) {
     moveMarker(state.pointer.target, point);
     clearResult();
     setInstruction('Merkki siirretty. Voit vetää myös muita merkkejä tai laskea arvion, kun palkin reuna on piirretty.');
-  } else if (state.pointer.tracing) {
-    addEdgePoint(point);
-    clearResult();
-    setInstruction(`Palkin reunaan on merkitty ${state.edgePoints.length} kohtaa. Vedä tarvittaessa keltaista merkkiä ristikkoa käyttäen tarkempaan kohtaan.`);
   } else if (state.tool === 'baseline') {
-    addBaselinePoint(point);
     clearResult();
+    addBaselinePoint(point);
   }
   state.pointer = null;
   updateControls();
@@ -533,9 +582,8 @@ elements.warningPercent.addEventListener('input', () => { if (state.result) calc
 elements.openCameraButton.addEventListener('click', openCamera);
 elements.freezeButton.addEventListener('click', freezeFrame);
 elements.imageUpload.addEventListener('change', (event) => loadImage(event.target.files?.[0]));
-elements.baselineButton.addEventListener('click', () => { state.interactionMode = 'mark'; state.tool = 'baseline'; setInstruction('Napauta palkin samaa alareunaa ensin vasemman ja sitten oikean kiinnityskohdan läheltä. Voit vetää siniset merkit myöhemmin tarkkaan kohtaan.'); updateControls(); });
-elements.edgeButton.addEventListener('click', () => { state.interactionMode = 'mark'; state.tool = 'edge'; setInstruction('Vedä sormella saman palkin alareunaa pitkin. Piirrä erityisen huolellisesti kohta, jossa taipuma näyttää suurimmalta.'); updateControls(); });
-elements.undoButton.addEventListener('click', () => { if (state.edgePoints.length) state.edgePoints.pop(); else state.baseline.pop(); state.result = null; updateControls(); redraw(); });
+elements.baselineButton.addEventListener('click', () => { state.interactionMode = 'mark'; state.tool = 'baseline'; setInstruction('Napauta palkin alareunaa ensin vasemman ja sitten oikean kiinnityskohdan läheltä. Voit vetää siniset merkit myöhemmin tarkkaan kohtaan.'); updateControls(); });
+elements.undoButton.addEventListener('click', () => { state.baseline.pop(); state.detectedEdge = []; clearResult(); updateControls(); redraw(); });
 elements.resetButton.addEventListener('click', resetMarks);
 elements.calculateButton.addEventListener('click', calculate);
 elements.saveRecordButton.addEventListener('click', saveRecord);

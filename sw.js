@@ -1,4 +1,4 @@
-const CACHE = "taipuma-arvio-v6";
+const CACHE = "taipuma-arvio-v7";
 const ASSETS = ["./", "./index.html", "./styles.css", "./app.js", "./manifest.webmanifest", "./icon.svg"];
 
 self.addEventListener("install", (event) => {
